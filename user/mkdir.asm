@@ -733,6 +733,7 @@ trace:
  3a8:	48d9                	li	a7,22
  ecall
  3aa:	00000073          	ecall
+ ret
  3ae:	8082                	ret
 
 00000000000003b0 <putc>:

@@ -5,7 +5,7 @@ user/_strace:     file format elf64-littleriscv
 Disassembly of section .text:
 
 0000000000000000 <main>:
-#include <sys/types.h>
+#include "../kernel/types.h"
 #include "user.h"
 
 int main(int argc, char** argv){
@@ -714,6 +714,7 @@ trace:
  382:	48d9                	li	a7,22
  ecall
  384:	00000073          	ecall
+ ret
  388:	8082                	ret
 
 000000000000038a <putc>:

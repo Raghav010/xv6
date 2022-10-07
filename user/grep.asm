@@ -1003,6 +1003,7 @@ trace:
  5de:	48d9                	li	a7,22
  ecall
  5e0:	00000073          	ecall
+ ret
  5e4:	8082                	ret
 
 00000000000005e6 <putc>:

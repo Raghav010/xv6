@@ -693,6 +693,7 @@ trace:
  35a:	48d9                	li	a7,22
  ecall
  35c:	00000073          	ecall
+ ret
  360:	8082                	ret
 
 0000000000000362 <putc>:

@@ -2097,6 +2097,7 @@ trace:
      e86:	48d9                	li	a7,22
  ecall
      e88:	00000073          	ecall
+ ret
      e8c:	8082                	ret
 
 0000000000000e8e <putc>:

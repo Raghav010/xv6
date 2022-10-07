@@ -1953,6 +1953,7 @@ trace:
      f3c:	48d9                	li	a7,22
  ecall
      f3e:	00000073          	ecall
+ ret
      f42:	8082                	ret
 
 0000000000000f44 <putc>:

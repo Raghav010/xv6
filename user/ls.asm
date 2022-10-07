@@ -988,6 +988,7 @@ trace:
  608:	48d9                	li	a7,22
  ecall
  60a:	00000073          	ecall
+ ret
  60e:	8082                	ret
 
 0000000000000610 <putc>:
