@@ -147,6 +147,9 @@ found:
   p->context.sp = p->kstack + PGSIZE;
 
   p->trac_stat = 0;
+  p->nticks = 0;
+  p->ticklim = 0;
+  p->alarm_lock = 0;
 
   return p;
 }
@@ -171,6 +174,10 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->nticks = 0;
+  p->ticklim = 0;
+  p->alarm_lock = 0;
+  // free(p->fn);
   p->state = UNUSED;
 }
 

@@ -95,6 +95,38 @@ sys_trace(void){
   int x;
   argint(0,&x);
   // printf("Syscall number: %d \n",x);
+  
   myproc()->trac_stat = x;
-  return 1;
+  
+  return 0;
+}
+
+uint64
+sys_sigalarm(void){
+
+  // printf("Alarm handler called\n");
+
+  struct proc* p = myproc();
+  
+  int n;
+  uint64 fn;
+
+  argint(0, &n);
+  argaddr(1,&fn);
+
+  p->ticklim = n;
+  p->nticks = 0;
+  p->fn = fn;
+
+  return 0;
+
+}
+
+uint64
+sys_sigreturn(void){
+  struct proc* p = myproc();
+  *(p->trapframe) = *(p->trapframecpy);
+  // kfree((void*)p->trapframecpy);
+  p->alarm_lock = 0;
+  return 0;
 }
