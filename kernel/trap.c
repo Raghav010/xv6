@@ -82,14 +82,12 @@ usertrap(void)
       p->nticks++;
       // p->ticks_prev = ticks;
       if(p->nticks==p->ticklim){
-        // printf("Executing function\n");
         // printf("%d\n",p->nticks);
         p->alarm_lock = 1;
         p->nticks = 0;
         p->trapframecpy = (struct trapframe *)kalloc();
         *(p->trapframecpy) = *(p->trapframe);
         p->trapframe->epc = p->fn;
-        // printf("Function finished executing\n");
       }
     }
     // printf("Yielded\n");

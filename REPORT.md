@@ -10,6 +10,7 @@
 2. Added syscall (`trace`) definition with 2 arguments to `user.h`
 3. Added arrays for easy access to syscall names (`char* sysnames`) and no of arguments(`int sysargs`) in the `syscall` function to be able to trace properly
 4. Added `p->trac_stat` to `struct proc` in order to detect if the `trace` syscall was called and changed `procalloc` and `freeproc` to initialize and decomission, respectively, `p->trac_stat` to 0.
+5. Copied value of parent's `trac_stat` to child in `fork` function in `proc.c`
 5. Added the code for the `trace` syscall to sysproc:
     ```C
     uint64

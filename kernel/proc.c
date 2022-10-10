@@ -313,6 +313,9 @@ fork(void)
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
+  //copy strace
+  np->trac_stat = p->trac_stat;
+
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
 
