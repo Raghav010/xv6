@@ -151,6 +151,9 @@ found:
   p->ticklim = 0;
   p->alarm_lock = 0;
 
+  //setting creation time(tick number)
+  p->start_tick=ticks;
+
   return p;
 }
 
@@ -177,6 +180,7 @@ freeproc(struct proc *p)
   p->nticks = 0;
   p->ticklim = 0;
   p->alarm_lock = 0;
+  p->start_tick=0;
   // free(p->fn);
   p->state = UNUSED;
 }
@@ -462,21 +466,55 @@ scheduler(void)
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 
-    for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+    // round robin scheduling
+    if(SCHED_POLICY==1)
+    {
+      for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if(p->state == RUNNABLE) {
+          // Switch to chosen process.  It is the process's job
+          // to release its lock and then reacquire it
+          // before jumping back to us.
+          p->state = RUNNING;
+          c->proc = p;
+          swtch(&c->context, &p->context);
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+          c->proc = 0;
+        }
+        release(&p->lock);
       }
-      release(&p->lock);
+    }
+
+    if(SCHED_POLICY==0)
+    {
+      // fcfs scheduling
+      int minCreateTime=__INT_MAX__;
+      struct proc* minP=0;
+      for(p=proc;p<&proc[NPROC];p++)
+      {
+        acquire(&p->lock);
+        if((p->state==RUNNABLE) && (p->start_tick<minCreateTime))
+        {
+          minCreateTime=p->start_tick;
+          minP=p;
+        }
+        release(&p->lock);
+      }
+
+      if(minP!=0)
+      {
+        acquire(&minP->lock);
+        if(minP->state==RUNNABLE)
+        {
+          minP->state=RUNNING;
+          c->proc=minP;
+          swtch(&c->context, &minP->context);
+          c->proc=0;
+        }
+        release(&minP->lock);
+      }
     }
   }
 }
