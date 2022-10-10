@@ -91,7 +91,7 @@ usertrap(void)
       }
     }
     // printf("Yielded\n");
-    if(SCHED_POLICY!=0)
+    if(SCHED_POLICY!=0 || SCHED_POLICY!=2)
     {
       yield();
     }
@@ -171,7 +171,7 @@ kerneltrap()
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
   {
-    if(SCHED_POLICY!=0)
+    if(SCHED_POLICY!=0 || SCHED_POLICY!=2)
     {
       yield();
     }

@@ -154,6 +154,12 @@ found:
   //setting creation time(tick number)
   p->start_tick=ticks;
 
+  p->sched_times=0;
+  p->recent_run_ticks=0;
+  p->niceness=5;
+  p->sp=60;
+  p->dp=60;
+
   return p;
 }
 
@@ -180,7 +186,12 @@ freeproc(struct proc *p)
   p->nticks = 0;
   p->ticklim = 0;
   p->alarm_lock = 0;
-  p->start_tick=0;
+  p->start_tick=0; //not needed right now
+  p->sched_times=0;
+  p->recent_run_ticks=0;
+  p->niceness=5;
+  p->sp=60;
+  p->dp=60;
   // free(p->fn);
   p->state = UNUSED;
 }
@@ -475,6 +486,8 @@ scheduler(void)
       for(p = proc; p < &proc[NPROC]; p++) {
         acquire(&p->lock);
         if(p->state == RUNNABLE) {
+          
+
           // Switch to chosen process.  It is the process's job
           // to release its lock and then reacquire it
           // before jumping back to us.
@@ -482,6 +495,7 @@ scheduler(void)
           c->proc = p;
           swtch(&c->context, &p->context);
 
+      
           // Process is done running for now.
           // It should have changed its p->state before coming back.
           c->proc = 0;
@@ -517,6 +531,71 @@ scheduler(void)
           c->proc=0;
         }
         release(&minP->lock);
+      }
+    }
+
+    if(SCHED_POLICY==2)
+    {
+      // PBS scheduling
+      int max_priority=100; // higher the number, lower the priority
+      struct proc* maxPriorP=0;
+      for(p=proc;p<&proc[NPROC];p++)
+      {
+        acquire(&p->lock);
+        if((p->state==RUNNABLE) && (p->dp<max_priority)) //checking for higher priority process
+        {
+          max_priority=p->dp;
+          maxPriorP=p;
+        }
+        else if((p->state==RUNNABLE) && (p->dp==max_priority)) //if priority is equal
+        {
+          if(maxPriorP!=0 && maxPriorP!=p) //checking if maxpriorP is valid
+          {
+            acquire(&maxPriorP->lock);
+            struct proc* old_MaxPriorP=maxPriorP;
+            if(p->sched_times < maxPriorP->sched_times) //taking on which was scheduled least times
+            {
+              maxPriorP=p;
+            }
+            else if(p->sched_times == maxPriorP->sched_times)
+            {
+              if(p->start_tick < maxPriorP->start_tick) //checking which one started first
+              {
+                maxPriorP=p;
+              }
+            }
+            release(&old_MaxPriorP->lock);
+          }
+          else
+          {
+            maxPriorP=p;
+          }
+        }
+        release(&p->lock);
+      }
+
+      //process to run has been selected
+      if(maxPriorP!=0)
+      {
+        acquire(&maxPriorP->lock);
+        if(maxPriorP->state==RUNNABLE)
+        {
+          maxPriorP->recent_run_ticks=0;
+          maxPriorP->sched_times++;
+          maxPriorP->state=RUNNING;
+          c->proc=maxPriorP;
+
+          int brunTime=ticks;
+          swtch(&c->context, &maxPriorP->context);
+
+          maxPriorP->recent_run_ticks=(ticks-brunTime); //how much time it ran for
+          maxPriorP->niceness=0;
+          int k=(((maxPriorP->sp - maxPriorP->niceness +5)<100) ? (maxPriorP->sp - maxPriorP->niceness +5) : 100);
+          maxPriorP->dp=((0 > k) ? 0 : k);
+
+          c->proc=0;
+        }
+        release(&maxPriorP->lock);
       }
     }
   }
@@ -602,7 +681,16 @@ sleep(void *chan, struct spinlock *lk)
   p->chan = chan;
   p->state = SLEEPING;
 
+  int bSleepTime=ticks;
+
   sched();
+
+  int sleepT=ticks-bSleepTime;
+  p->niceness=(int)((((float)sleepT)/(p->recent_run_ticks + sleepT))*10); //updating niceness
+
+  int k=(((p->sp - p->niceness +5)<100) ? (p->sp - p->niceness +5) : 100);
+  p->dp=((0 > k) ? 0 : k); //updating dp
+  
 
   // Tidy up.
   p->chan = 0;

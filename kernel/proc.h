@@ -1,4 +1,4 @@
-#define SCHED_POLICY 0   //0-FCFS 1-RR
+#define SCHED_POLICY 2   //0-FCFS 1-RR 2-PBS
 
 // Saved registers for kernel context switches.
 struct context {
@@ -94,6 +94,12 @@ struct proc {
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
 
+  int sched_times;             // the number of times the process was scheduled
+  int recent_run_ticks;        // ticks the process ran for since last time scheduled 
+  int niceness;                // niceness
+  int dp;                      // dynamic priority
+  int sp;                      // static priority (need lock??)
+
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process
 
@@ -107,6 +113,8 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int start_tick;              // process creation time 
+  
+
   int trac_stat;               // Trace Status
   int nticks;                  // No of ticks the current process has gone through till now
   int alarm_lock;              // Checks if alarm is running
