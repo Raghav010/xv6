@@ -1,3 +1,5 @@
+#define SCHED_POLICY 0   //0-FCFS 1-RR
+
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -104,6 +106,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int start_tick;              // process creation time 
   int trac_stat;               // Trace Status
   int nticks;                  // No of ticks the current process has gone through till now
   int alarm_lock;              // Checks if alarm is running
