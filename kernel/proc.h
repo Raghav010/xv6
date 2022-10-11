@@ -1,4 +1,4 @@
-#define SCHED_POLICY 2   //0-FCFS 1-RR 2-PBS
+#define SCHED_POLICY 0   //0-FCFS 1-RR 2-PBS
 
 // Saved registers for kernel context switches.
 struct context {
@@ -98,7 +98,7 @@ struct proc {
   int recent_run_ticks;        // ticks the process ran for since last time scheduled 
   int niceness;                // niceness
   int dp;                      // dynamic priority
-  int sp;                      // static priority (need lock??)
+  int sp;                      // static priority default 60
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process
@@ -121,5 +121,9 @@ struct proc {
   int ticklim;                 // No of ticks after which function must be executed
   uint64 fn;                   // Function to be executed if nticks>=ticklim
   struct trapframe *trapframecpy; // Copy of registers for sigreturn
+
+  uint rtime;                   // How long the process ran for
+  uint ctime;                   // When was the process created 
+  uint etime;                   // When did the process exited
 
 };

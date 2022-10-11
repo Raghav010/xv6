@@ -83,6 +83,7 @@ argstr(int n, char *buf, int max)
 extern uint64 sys_fork(void);
 extern uint64 sys_exit(void);
 extern uint64 sys_wait(void);
+extern uint64 sys_waitx(void);
 extern uint64 sys_pipe(void);
 extern uint64 sys_read(void);
 extern uint64 sys_kill(void);
@@ -132,6 +133,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_trace]     sys_trace,
 [SYS_sigalarm]  sys_sigalarm,
 [SYS_sigreturn] sys_sigreturn,
+[SYS_waitx]     sys_waitx
 
 };
 

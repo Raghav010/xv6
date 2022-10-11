@@ -161,6 +161,11 @@ found:
   p->sp=60;
   p->dp=60;
 
+
+  p->rtime = 0;
+  p->etime = 0;
+  p->ctime = ticks;
+
   return p;
 }
 
@@ -407,6 +412,8 @@ exit(int status)
   p->xstate = status;
   p->state = ZOMBIE;
 
+  p->etime = ticks;
+
   release(&wait_lock);
 
   // Jump into the scheduler, never to return.
@@ -463,6 +470,73 @@ wait(uint64 addr)
   }
 }
 
+
+// Wait for a child process to exit and return its pid.
+// Return -1 if this process has no children.
+int
+waitx(uint64 addr, uint* wtime, uint* rtime)
+{
+  struct proc *np;
+  int havekids, pid;
+  struct proc *p = myproc();
+
+  acquire(&wait_lock);
+
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(np = proc; np < &proc[NPROC]; np++){
+      if(np->parent == p){
+        // make sure the child isn't still in exit() or swtch().
+        acquire(&np->lock);
+
+        havekids = 1;
+        if(np->state == ZOMBIE){
+          // Found one.
+          pid = np->pid;
+          *rtime = np->rtime;
+          *wtime = np->etime - np->ctime - np->rtime;
+          if(addr != 0 && copyout(p->pagetable, addr, (char *)&np->xstate,
+                                  sizeof(np->xstate)) < 0) {
+            release(&np->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          freeproc(np);
+          release(&np->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&np->lock);
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || p->killed){
+      release(&wait_lock);
+      return -1;
+    }
+
+    // Wait for a child to exit.
+    sleep(p, &wait_lock);  //DOC: wait-sleep
+  }
+}
+
+
+void
+update_time()
+{
+  struct proc* p;
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->state == RUNNING) {
+      p->rtime++;
+    }
+    release(&p->lock); 
+  }
+}
+
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -509,7 +583,8 @@ scheduler(void)
     {
       // fcfs scheduling
       int minCreateTime=__INT_MAX__;
-      struct proc* minP=0;
+      struct proc* minP=0;  //process with minimum create time/ticks
+
       for(p=proc;p<&proc[NPROC];p++)
       {
         acquire(&p->lock);
@@ -521,10 +596,12 @@ scheduler(void)
         release(&p->lock);
       }
 
-      if(minP!=0)
+      if(minP!=0) //checking if a process was chosen for scheduling, if no processes in proc table then no processs would be chosen
       {
         acquire(&minP->lock);
-        if(minP->state==RUNNABLE)
+        // checking if the proc isnt running on another cpu,
+        // while looping through the proc table another cpu may have acquired this proc
+        if(minP->state==RUNNABLE) 
         {
           minP->state=RUNNING;
           c->proc=minP;
@@ -550,17 +627,19 @@ scheduler(void)
         }
         else if((p->state==RUNNABLE) && (p->dp==max_priority)) //if priority is equal
         {
-          if(maxPriorP!=0 && maxPriorP!=p) //checking if maxpriorP is valid
+          if(maxPriorP!=0 && maxPriorP!=p) //checking if maxpriorP is valid and is not equal to process itself
           {
             acquire(&maxPriorP->lock);
-            struct proc* old_MaxPriorP=maxPriorP;
+
+            // this is there since maxPriorP may change to p, and releasing maxPriorP may release p itself
+            struct proc* old_MaxPriorP=maxPriorP; 
             if(p->sched_times < maxPriorP->sched_times) //taking on which was scheduled least times
             {
               maxPriorP=p;
             }
             else if(p->sched_times == maxPriorP->sched_times)
             {
-              if(p->start_tick < maxPriorP->start_tick) //checking which one started first
+              if(p->start_tick < maxPriorP->start_tick) //checking which one started first(schedules earlier one)
               {
                 maxPriorP=p;
               }
@@ -581,7 +660,7 @@ scheduler(void)
         acquire(&maxPriorP->lock);
         if(maxPriorP->state==RUNNABLE)
         {
-          maxPriorP->recent_run_ticks=0;
+          maxPriorP->recent_run_ticks=0; //resetting run time since last scheduling
           maxPriorP->sched_times++;
           maxPriorP->state=RUNNING;
           c->proc=maxPriorP;
@@ -590,9 +669,9 @@ scheduler(void)
           swtch(&c->context, &maxPriorP->context);
 
           maxPriorP->recent_run_ticks=(ticks-brunTime); //how much time it ran for
-          maxPriorP->niceness=0;
+          maxPriorP->niceness=0; // setting niceness for now
           int k=(((maxPriorP->sp - maxPriorP->niceness +5)<100) ? (maxPriorP->sp - maxPriorP->niceness +5) : 100);
-          maxPriorP->dp=((0 > k) ? 0 : k);
+          maxPriorP->dp=((0 > k) ? 0 : k); // setting dynamic priority for now
 
           c->proc=0;
         }
@@ -686,8 +765,9 @@ sleep(void *chan, struct spinlock *lk)
 
   sched();
 
-  int sleepT=ticks-bSleepTime;
-  p->niceness=(int)((((float)sleepT)/(p->recent_run_ticks + sleepT))*10); //updating niceness
+  int sleepT=ticks-bSleepTime; //time it was sleeping for
+  if((p->recent_run_ticks + sleepT)!=0)
+    p->niceness=(int)(((sleepT)/(p->recent_run_ticks + sleepT))*10); //updating niceness
 
   int k=(((p->sp - p->niceness +5)<100) ? (p->sp - p->niceness +5) : 100);
   p->dp=((0 > k) ? 0 : k); //updating dp
