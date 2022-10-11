@@ -154,9 +154,10 @@ found:
   //setting creation time(tick number)
   p->start_tick=ticks;
 
+  //setting up scheduling variables
   p->sched_times=0;
   p->recent_run_ticks=0;
-  p->niceness=5;
+  p->niceness=5; //default niceness is 5
   p->sp=60;
   p->dp=60;
 
@@ -186,7 +187,7 @@ freeproc(struct proc *p)
   p->nticks = 0;
   p->ticklim = 0;
   p->alarm_lock = 0;
-  p->start_tick=0; //not needed right now
+  p->start_tick=0; 
   p->sched_times=0;
   p->recent_run_ticks=0;
   p->niceness=5;
