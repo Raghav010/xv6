@@ -148,3 +148,24 @@ sys_sigreturn(void){
   p->alarm_lock = 0;
   return 0;
 }
+
+
+uint64
+sys_settickets(void)
+{
+  struct proc* pr=myproc();
+  int ticket_num;
+  argint(0,&ticket_num);
+  pr->tickets=ticket_num;
+  return 0;
+}
+
+uint64
+sys_set_priority(void)
+{
+  int new_sp,pid;
+  argint(0,&new_sp);
+  argint(1,&pid);
+  set_priority(new_sp,pid);
+  return 0;
+}
