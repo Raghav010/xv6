@@ -20,6 +20,15 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
+
+// pseudo-random number generator seed, only use variables with this lock
+struct spinlock psrg_lock; //is this lock local???
+int psrg_seed=27;
+int multiplier=6;
+int increment=7;
+
+
+
 // helps ensure that wakeups of wait()ing
 // parents are not lost. helps obey the
 // memory model when using p->parent.
@@ -51,6 +60,7 @@ procinit(void)
   
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  initlock(&psrg_lock,"psrg");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
@@ -88,6 +98,33 @@ myproc(void)
   pop_off();
   return p;
 }
+
+
+// sets the new static priority of a process with pid, returns -1 in case pid(RUNNABLE) doesnt exist
+int set_priority(int new_priority,int pid)
+{
+  int old_sp=-1;
+  struct proc* p;
+
+  //finding the process with that pid
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if (p->state == RUNNABLE)
+    {
+      if(p->pid==pid)
+      {
+        old_sp=p->sp;
+        p->sp=new_priority;
+        release(&p->lock);
+        break;
+      }
+    }
+    release(&p->lock);
+  }
+  return old_sp;
+}
+
 
 int
 allocpid()
@@ -153,6 +190,7 @@ found:
 
   //setting creation time(tick number)
   p->start_tick=ticks;
+  p->tickets=1;
 
   //setting up scheduling variables
   p->sched_times=0;
@@ -198,6 +236,7 @@ freeproc(struct proc *p)
   p->niceness=5;
   p->sp=60;
   p->dp=60;
+  p->tickets=1;
   // free(p->fn);
   p->state = UNUSED;
 }
@@ -332,6 +371,9 @@ fork(void)
 
   //copy strace
   np->trac_stat = p->trac_stat;
+
+  // inherit same number of tickets as parent
+  np->tickets=p->tickets;
 
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
@@ -588,7 +630,7 @@ scheduler(void)
       for(p=proc;p<&proc[NPROC];p++)
       {
         acquire(&p->lock);
-        if((p->state==RUNNABLE) && (p->start_tick<minCreateTime))
+        if((p->state==RUNNABLE) && (p->start_tick < minCreateTime))
         {
           minCreateTime=p->start_tick;
           minP=p;
@@ -678,8 +720,81 @@ scheduler(void)
         release(&maxPriorP->lock);
       }
     }
+
+    if(SCHED_POLICY==3)
+    {
+      int total_tickets=0; //what about ticket numbers changing after total_tickets was calculated
+
+      //finding total number of tickets , assuming every runnable process has at least 1 ticket
+      for(p = proc; p < &proc[NPROC]; p++) 
+      {
+        acquire(&p->lock);
+        if(p->state == RUNNABLE) 
+        {
+          total_tickets+=(p->tickets);  //lock tickets ???
+        }
+        release(&p->lock);
+      }
+
+      
+      if(total_tickets!=0)  //checking if a runnable process exists
+      {
+        // choosing a random ticket
+        int rand_ticket_num;
+        acquire(&psrg_lock);
+
+        // checking for validity of psrg parameters
+        if (psrg_seed >= total_tickets)
+        {
+          psrg_seed = (psrg_seed) % total_tickets;
+        }
+        if (increment >= total_tickets)
+        {
+          increment = (increment) % total_tickets;
+        }
+        if (multiplier > total_tickets)
+        {
+          multiplier = (multiplier) % total_tickets;
+        }
+        else if (multiplier == total_tickets) // multiplier needs to be greater than zero
+        {
+          multiplier = 1;
+        }
+        psrg_seed = (multiplier * psrg_seed + increment) % total_tickets;
+        rand_ticket_num = psrg_seed;
+        release(&psrg_lock);
+
+
+
+        int running_ticket_num = 0; // cumulative ticket sum
+
+        // finding which proc ticket it is and running that proc
+        for (p = proc; p < &proc[NPROC]; p++)
+        {
+          acquire(&p->lock);
+          if (p->state == RUNNABLE)
+          {
+            running_ticket_num += (p->tickets);
+            if (rand_ticket_num <= running_ticket_num)
+            {
+              p->state = RUNNING; // reduce ticket number here?
+              c->proc = p;
+              swtch(&c->context, &p->context);
+
+              c->proc = 0;
+              release(&p->lock);
+              break;
+            }
+          }
+          release(&p->lock);
+        }
+      }
+
+    }
   }
 }
+
+
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
@@ -718,6 +833,7 @@ yield(void)
   sched();
   release(&p->lock);
 }
+
 
 // A fork child's very first scheduling by scheduler()
 // will swtch to forkret.
