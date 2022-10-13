@@ -50,8 +50,14 @@ usertrap(void)
   // save user program counter.
   p->trapframe->epc = r_sepc();
 
-  if(r_scause() == 15 || r_scause() == 13){
-    p->killed = uvmuncopy(p->pagetable,r_stval());
+  if(r_scause() == 15){
+    if((uint64)r_stval()>=MAXVA||((uint64)r_stval()>=PGROUNDDOWN(p->trapframe->sp)-PGSIZE&&(uint64)r_stval()<=PGROUNDDOWN(p->trapframe->sp))){
+      printf("Address out of bounds\n");
+      p->killed = 1;
+    }
+    else{
+      p->killed = uvmuncopy(p->pagetable,r_stval());
+    }
   }
   
   else if(r_scause() == 8){
