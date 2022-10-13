@@ -26,6 +26,19 @@ struct {
   struct run *freelist;
 } kmem;
 
+void increment_n_using(uint64 pno){
+  acquire(&n_using_lock);
+  if(n_using[pno]<0){
+    release(&n_using_lock);
+    panic("Increment problem");
+  }
+  else{
+    n_using[pno]++;
+    release(&n_using_lock);
+  }
+
+}
+
 void
 kinit()
 {
@@ -58,18 +71,34 @@ kfree(void *pa)
 {
   struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
-    panic("kfree");
+  // if(((uint64)pa % PGSIZE) != 0 )
+  //   panic("kfree2");
+  // else if((char*)pa < end)
+  //   panic("kfree1");
+  // else if((uint64)pa >= PHYSTOP){
+  //   // printf("%d %d\n",(uint64)pa,PHYSTOP);
+  //   panic("kfree");
+  // }
 
   // If n_using of pa > 1, we cannot free that memory space
   acquire(&n_using_lock);
   if(n_using[(uint64)pa/PGSIZE]>1){
-    n_using[(uint64)pa/PGSIZE]--;
+    if(n_using[(uint64)pa/PGSIZE]<=0){
+      panic("What??3");
+    }
+    else{
+      n_using[(uint64)pa/PGSIZE]--;
+    }
     release(&n_using_lock);
     return;
   }
 
-  n_using[(uint64)pa/PGSIZE]--;
+  if(n_using[(uint64)pa/PGSIZE]<=0){
+    panic("What??2");
+  }
+  else{
+    n_using[(uint64)pa/PGSIZE]--;
+  }
   release(&n_using_lock);
 
   // Fill with junk to catch dangling refs.
@@ -101,9 +130,7 @@ kalloc(void)
     memset((char*)r, 5, PGSIZE); // fill with junk
 
   if(r){
-    acquire(&n_using_lock);
-    n_using[(uint64)r/PGSIZE]++;
-    release(&n_using_lock);
+    increment_n_using((uint64)r/PGSIZE);
   }
   
   return (void*)r;

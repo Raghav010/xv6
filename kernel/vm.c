@@ -15,8 +15,7 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
-extern int* n_using; // Bring the array from kalloc
-extern struct spinlock n_using_lock; // Bring the lock from kalloc
+extern void increment_n_using(uint64 pno);
 
 // Make a direct-map page table for the kernel.
 pagetable_t
@@ -322,21 +321,16 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
 
-    printf("%d ",flags);
+    // only enters if PTE is writtable. If not, then pagefault will happen whether COW or not.
+    if(flags & PTE_W){
+      // sets PTE_W to 0
+      flags &= (~PTE_W);
 
-    // sets the PTE_WW value of PTE
-    flags |= ((flags & PTE_W) << 3);
-    printf("%d ",flags);
+      // sets PTE_COW to 1
+      flags |= PTE_COW;
 
-    // sets PTE_W to 0
-    flags &= (~PTE_W);
-    printf("%d ",flags);
-
-    // sets PTE_COW to 1
-    flags |= PTE_COW;
-    printf("%d\n",flags);
-
-    *pte = pa|flags;
+      *pte = PA2PTE(pa)|flags;
+    }
 
     // if((mem = kalloc()) == 0)
     //   goto err;
@@ -346,9 +340,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       goto err;
     }
 
-    acquire(&n_using_lock);
-    n_using[pa/PGSIZE]++;
-    release(&n_using_lock);
+    increment_n_using((uint64)pa/PGSIZE);
 
   }
   return 0;
@@ -366,6 +358,10 @@ uvmuncopy(pagetable_t pt, uint64 va){
   uint64 flags;
   char *mem;
   va = PGROUNDDOWN(va);
+
+  if (va > MAXVA){
+    return 1;
+  }
   
   if((pte = walk(pt,va,0)) == 0){
     panic("uvmuncopy: pte should exist");
@@ -379,9 +375,11 @@ uvmuncopy(pagetable_t pt, uint64 va){
 
   // check if COW or not
   if((*pte & PTE_COW) == 0){
-    panic("uvmuncopy: page is not COW");
+    printf("uvmuncopy: page is not COW\n");
     return 1;
   }
+
+  // if not COW, then it wasn't writtable before.
 
   pa = PTE2PA(*pte);
   flags = PTE_FLAGS(*pte);
@@ -390,7 +388,7 @@ uvmuncopy(pagetable_t pt, uint64 va){
   flags |= PTE_W;
 
   if((mem = kalloc())==0){
-    panic("uvmuncopy: kalloc error");
+    printf("uvmuncopy: kalloc error\n");
     return 1;
   }
   memmove(mem,(char*)pa,PGSIZE);
