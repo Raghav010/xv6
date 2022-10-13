@@ -49,12 +49,8 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
-
-  if(r_scause() == 15 || r_scause() == 13){
-    p->killed = uvmuncopy(p->pagetable,r_stval());
-  }
   
-  else if(r_scause() == 8){
+  if(r_scause() == 8){
     // system call
 
     if(killed(p))
@@ -160,7 +156,7 @@ kerneltrap()
   uint64 sepc = r_sepc();
   uint64 sstatus = r_sstatus();
   uint64 scause = r_scause();
-
+  
   if((sstatus & SSTATUS_SPP) == 0)
     panic("kerneltrap: not from supervisor mode");
   if(intr_get() != 0)

@@ -15,9 +15,6 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
-extern int* n_using; // Bring the array from kalloc
-extern struct spinlock n_using_lock; // Bring the lock from kalloc
-
 // Make a direct-map page table for the kernel.
 pagetable_t
 kvmmake(void)
@@ -311,45 +308,22 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  // char *mem;
+  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
-
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-
-    printf("%d ",flags);
-
-    // sets the PTE_WW value of PTE
-    flags |= ((flags & PTE_W) << 3);
-    printf("%d ",flags);
-
-    // sets PTE_W to 0
-    flags &= (~PTE_W);
-    printf("%d ",flags);
-
-    // sets PTE_COW to 1
-    flags |= PTE_COW;
-    printf("%d\n",flags);
-
-    *pte = pa|flags;
-
-    // if((mem = kalloc()) == 0)
-    //   goto err;
-    // memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
-      // kfree(mem);
+    if((mem = kalloc()) == 0)
+      goto err;
+    memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+      kfree(mem);
       goto err;
     }
-
-    acquire(&n_using_lock);
-    n_using[pa/PGSIZE]++;
-    release(&n_using_lock);
-
   }
   return 0;
 
@@ -357,50 +331,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
-
-// create a new page in COW
-int
-uvmuncopy(pagetable_t pt, uint64 va){
-  pte_t *pte;
-  uint64 pa;
-  uint64 flags;
-  char *mem;
-  va = PGROUNDDOWN(va);
-  
-  if((pte = walk(pt,va,0)) == 0){
-    panic("uvmuncopy: pte should exist");
-    return 1;
-  }
-
-  if((*pte & PTE_V) == 0){
-    panic("uvmuncopy: page not present");
-    return 1;
-  }
-
-  // check if COW or not
-  if((*pte & PTE_COW) == 0){
-    panic("uvmuncopy: page is not COW");
-    return 1;
-  }
-
-  pa = PTE2PA(*pte);
-  flags = PTE_FLAGS(*pte);
-
-  flags = flags & (~PTE_COW);
-  flags |= PTE_W;
-
-  if((mem = kalloc())==0){
-    panic("uvmuncopy: kalloc error");
-    return 1;
-  }
-  memmove(mem,(char*)pa,PGSIZE);
-  *pte = PA2PTE(mem)|flags;
-  kfree((void*)pa);
-
-  return 0;
-
-}
-
 
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
@@ -422,18 +352,12 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-  pte_t* pte;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
-    pte = walk(pagetable,va0,0);
-    if(*pte & PTE_COW){
-      uvmuncopy(pagetable,va0);
-      pa0 = walkaddr(pagetable,va0);
-    }
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
