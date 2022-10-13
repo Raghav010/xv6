@@ -11,6 +11,9 @@
 
 void freerange(void *pa_start, void *pa_end);
 
+int n_using[(PGROUNDUP(PHYSTOP)/PGSIZE)];
+struct spinlock n_using_lock;
+
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
@@ -27,6 +30,12 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&n_using_lock,"n_using lock");
+  acquire(&n_using_lock);
+  for(int i=0; i<(PGROUNDUP(PHYSTOP)/PGSIZE); i++){
+    n_using[i] = 1;
+  }
+  release(&n_using_lock);
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -35,8 +44,9 @@ freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
     kfree(p);
+  }
 }
 
 // Free the page of physical memory pointed at by pa,
@@ -50,6 +60,17 @@ kfree(void *pa)
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  // If n_using of pa > 1, we cannot free that memory space
+  acquire(&n_using_lock);
+  if(n_using[(uint64)pa/PGSIZE]>1){
+    n_using[(uint64)pa/PGSIZE]--;
+    release(&n_using_lock);
+    return;
+  }
+
+  n_using[(uint64)pa/PGSIZE]--;
+  release(&n_using_lock);
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -78,5 +99,12 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
+
+  if(r){
+    acquire(&n_using_lock);
+    n_using[(uint64)r/PGSIZE]++;
+    release(&n_using_lock);
+  }
+  
   return (void*)r;
 }

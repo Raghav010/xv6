@@ -1,4 +1,4 @@
-#define SCHED_POLICY 2   //0-FCFS 1-RR 2-PBS 3-LBS
+#define SCHED_POLICY 1   //0-FCFS 1-RR 2-PBS 3-LBS
 
 // Saved registers for kernel context switches.
 struct context {
