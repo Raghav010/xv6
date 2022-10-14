@@ -1,4 +1,4 @@
-#define SCHED_POLICY 1   //0-FCFS 1-RR 2-PBS 3-LBS
+#define SCHED_POLICY 1   //0-FCFS 1-RR 2-PBS 3-LBS 4-MLFQ
 
 // Saved registers for kernel context switches.
 struct context {
@@ -96,6 +96,7 @@ struct proc {
 
   int sched_times;             // the number of times the process was scheduled
   int recent_run_ticks;        // ticks the process ran for since last time scheduled 
+                               // not updated in real time(only updated after process finished running)
   int niceness;                // niceness
   int dp;                      // dynamic priority
   int sp;                      // static priority default 60
@@ -114,6 +115,12 @@ struct proc {
   char name[16];               // Process name (debugging)
   int start_tick;              // process creation time
   int tickets;                 // the number of tickets the process owns  
+
+  int inq;                     // denote if the process is already in one of the qs 
+  int q_num;                   // the queue this process belongs
+  int q_wait_time;             // the amount of time it wait for in a particular q 
+  int recent_run_time;         // ticks the process ran for since last time scheduled 
+                               // updated in real time(updated at every tick, allows for preemption)
   
 
   int trac_stat;               // Trace Status
@@ -128,3 +135,24 @@ struct proc {
   uint etime;                   // When did the process exited
 
 };
+
+
+struct q_node{
+    struct proc* process;
+    struct q_node* next;
+    struct q_node* prev;
+};
+
+struct queue{
+    struct q_node* head;
+    struct q_node* tail;
+    int size;
+};
+
+struct q_node* q_node_init(struct proc* curr);
+struct queue* queueinit();
+struct q_node* q_pop(struct queue* q);
+void q_push_front(struct queue* q, struct q_node* curr);
+void q_push_back(struct queue* q, struct q_node* curr);
+void free_q_node(struct q_node* node);
+void free_q(struct queue* q);

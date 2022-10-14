@@ -5,6 +5,20 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+//#include "queue.h"
+
+//queue implementation
+
+
+
+
+
+
+
+
+
+
+#define WAIT_TIME 25 // max ticks a process waits for
 
 struct cpu cpus[NCPU];
 
@@ -19,6 +33,35 @@ extern void forkret(void);
 static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
+
+
+// queues for mlfq
+/*struct queue* q0;
+struct queue* q1;
+struct queue* q2;
+struct queue* q3;
+struct queue* q4;*/
+struct proc* q_arr[5][NPROC];
+int q_sizes[5]={0};
+int max_run_times[5]={1,2,4,8,16}; // time slice per queue
+
+
+void shift_front(int qnum)
+{
+  for(int i=1;i<q_sizes[qnum];i++)
+  {
+    q_arr[qnum][i-1] = q_arr[qnum][i];
+  }
+}
+
+void shift_back(int qnum)
+{
+  for(int i=q_sizes[qnum];i>0;i--)
+  {
+    q_arr[qnum][i] = q_arr[qnum][i-1];
+  }
+}
+
 
 
 // pseudo-random number generator seed, only use variables with this lock
@@ -52,7 +95,7 @@ proc_mapstacks(pagetable_t kpgtbl)
   }
 }
 
-// initialize the proc table.
+// initialize the proc table and process queues
 void
 procinit(void)
 {
@@ -61,12 +104,88 @@ procinit(void)
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
   initlock(&psrg_lock,"psrg");
+
+
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
   }
 }
+
+
+int modify_queues()
+{
+  // increment wait ticks in qs and age and upgrade process
+  for(int i=1;i<5;i++)
+  {
+    if(q_sizes[i]!=0) //checking if the q has processes in it
+    {
+      int q_size=q_sizes[i];
+      int iter=0;
+
+      while(iter<q_size)
+      {
+        struct proc* wp = q_arr[i][iter]; //process for that node
+
+        acquire(&wp->lock); 
+        wp->q_wait_time++;
+        if(wp->q_wait_time>=WAIT_TIME) //if it has exceeded wait time push it up 
+        {
+          wp->q_wait_time=0;
+          wp->recent_run_time=0;
+          shift_front(wp->q_num); //popping
+          q_sizes[wp->q_num]--;
+          iter--;
+
+          wp->q_num--;
+          q_arr[wp->q_num][q_sizes[wp->q_num]]=wp; //pushed in higher priority
+          q_sizes[wp->q_num]++;
+          
+        }
+        release(&wp->lock);
+        iter++;
+      }
+    }
+  }
+
+  //  increment process runtime and check for preemption
+  struct proc* running_p=myproc(); // currently running process
+  if(running_p!=0)
+  {
+    running_p->recent_run_time++; // incremening run time
+    if(running_p->recent_run_time==max_run_times[running_p->q_num]) // checking
+    {
+      if(running_p->q_num!=4) //except for last q
+      {
+        running_p->q_num++;
+      }
+      yield();
+      return 0;
+    }
+  }
+
+
+
+  // check for higher priority processes and run them ,push front currently running proc
+  if(myproc()!=0)
+  {
+    for(int i=0;i<myproc()->q_num;i++)
+    {
+      if(q_sizes[i]!=0) //checking if the q has processes in it
+      {
+        if(myproc()->q_num > i) //if a higher priority process exists, preempt!!
+        {
+          //push front here and set inq to 1
+          yield();
+        }
+      }
+    }
+  }
+  return 0;
+
+}
+
 
 // Must be called with interrupts disabled,
 // to prevent race with process being moved
@@ -202,7 +321,10 @@ found:
   p->dp=60;
 
   // set q_wait_time=0 , recent_run_time=0 , and queue number=0
-
+  p->q_wait_time=0;
+  p->q_num=0;
+  p->recent_run_time=0;
+  p->inq=0;
 
   p->rtime = 0;
   p->etime = 0;
@@ -324,9 +446,8 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  //add to end of queue number q(in a locked manner)
-  //reset wait_time to 0 and run time=0
-
+  //printf("first user process\n");
+  
   release(&p->lock);
 }
 
@@ -402,8 +523,6 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  //add to end of queue number q (in a locked manner)
-  //reset wait_time to 0 and run time=0
   release(&np->lock);
 
   return pid;
@@ -802,6 +921,54 @@ scheduler(void)
 
     if(SCHED_POLICY==4)
     {
+      // adding runnable processes not inq to inq
+      for (p = proc; p < &proc[NPROC]; p++)
+      {
+        acquire(&p->lock);
+        if (p->state == RUNNABLE)
+        {
+          if(p->inq==0)
+          {
+            p->q_wait_time=0;
+            p->recent_run_time=0;
+            q_arr[p->q_num][q_sizes[p->q_num]]=p;
+            q_sizes[p->q_num]++;
+            p->inq=1;
+          }
+        }
+        release(&p->lock);
+      }
+
+
+      for(int i=0;i<5;i++)
+      {
+        if(q_sizes[i]!=0)
+        {
+          //printf("helllloo %d\n",q_arr[i]->size);
+          // struct q_node* run_node=q_pop(q_arr[i]); //lock??
+          //printf("mmmmmmsmmmm\n");
+          p=q_arr[i][0];
+          shift_front(i);
+          q_sizes[i]--;
+          //printf("sdsdsdsdsd\n");
+          acquire(&p->lock);
+          //printf("kkslllskkksll\n");
+          p->inq=0;
+          p->state = RUNNING;
+          c->proc = p;
+          swtch(&c->context, &p->context);
+
+        
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+          c->proc = 0;
+          
+          //printf("hello\n");
+          release(&p->lock);
+          //printf("lmklmk");
+          break;
+        }
+      }
       //go through qs 0,1,2,3,4 sequentially looking for processes
       // run processes with highest priority
     }
@@ -845,8 +1012,6 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
-  //add to end of queue number q (in a locked manner)
-  //reset wait_time to 0 and run time=0
   sched();
   release(&p->lock);
 }
@@ -926,8 +1091,6 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
-        //add to end of queue number q (in a locked manner)
-        //reset wait_time to 0 and run time=0
       }
       release(&p->lock);
     }
@@ -949,8 +1112,6 @@ kill(int pid)
       if(p->state == SLEEPING){
         // Wake process from sleep().
         p->state = RUNNABLE;
-        //add to end of queue number q (in a locked manner)
-        //reset wait_time to 0 and run time=0
       }
       release(&p->lock);
       return 0;

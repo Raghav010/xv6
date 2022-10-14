@@ -6,6 +6,9 @@
 #include "proc.h"
 #include "defs.h"
 
+
+
+
 struct spinlock tickslock;
 uint ticks;
 
@@ -101,10 +104,12 @@ usertrap(void)
       }
     }
     // printf("Yielded\n");
-    if(SCHED_POLICY!=0 || SCHED_POLICY!=2)
+    if(SCHED_POLICY!=0 && SCHED_POLICY!=2 && SCHED_POLICY!=4)
     {
+      // printf("Yielding %d\n",SCHED_POLICY);
       yield();
     }
+    modify_queues();
   }
 
   usertrapret();
@@ -181,10 +186,11 @@ kerneltrap()
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
   {
-    if(SCHED_POLICY!=0 || SCHED_POLICY!=2)
+    if(SCHED_POLICY!=0 && SCHED_POLICY!=2 && SCHED_POLICY!=4)
     {
       yield();
     }
+    modify_queues();
   }
   // the yield() may have caused some traps to occur,
   // so restore trap registers for use by kernelvec.S's sepc instruction.
@@ -200,11 +206,6 @@ clockintr()
   update_time();
   wakeup(&ticks);
   release(&tickslock);
-
-  // increment wait ticks in qs and age and upgrade process
-  //  increment process runtime and check for preemption
-  // check for higher priority processes and run them ,push front currently running proc
-
 }
 
 // check if it's an external interrupt or software interrupt,

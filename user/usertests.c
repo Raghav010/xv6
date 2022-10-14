@@ -3005,8 +3005,11 @@ countfree()
     close(fds[0]);
     
     while(1){
+      // printf("before sbrk\n");
       uint64 a = (uint64) sbrk(4096);
+      // printf("after sbrk\n");
       if(a == 0xffffffffffffffff){
+        // printf("Here!!!\n");
         break;
       }
 
@@ -3033,8 +3036,10 @@ countfree()
       printf("read() failed in countfree()\n");
       exit(1);
     }
-    if(cc == 0)
+    if(cc == 0){
+      // printf("Reaching here?\n");
       break;
+    }
     n += 1;
   }
 
@@ -3049,6 +3054,7 @@ drivetests(int quick, int continuous, char *justone) {
   do {
     printf("usertests starting\n");
     int free0 = countfree();
+    // printf("llkk\n");
     int free1 = 0;
     if (runtests(quicktests, justone)) {
       if(continuous != 2) {
