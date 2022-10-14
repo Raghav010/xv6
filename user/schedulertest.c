@@ -5,7 +5,7 @@
 
 #define NFORK 10
 #define IO 5
-#define PBS
+#define FCFS
 
 int main()
 {

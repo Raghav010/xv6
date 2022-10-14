@@ -25,7 +25,6 @@ struct queue* queueinit(){
 
 struct q_node* q_pop(struct queue* q){
     q->size--;
-    q->head = q->head->next;
     struct q_node* head = q->head;
     q->head = q->head->next;
     if(q->head != 0){
