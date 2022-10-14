@@ -200,6 +200,11 @@ clockintr()
   update_time();
   wakeup(&ticks);
   release(&tickslock);
+
+  // increment wait ticks in qs and age and upgrade process
+  //  increment process runtime and check for preemption
+  // check for higher priority processes and run them ,push front currently running proc
+
 }
 
 // check if it's an external interrupt or software interrupt,

@@ -106,7 +106,7 @@ int set_priority(int new_priority,int pid)
   int old_sp=-1;
   struct proc* p;
 
-  //finding the process with that pid
+  //finding the process with that pid(pre-emption???)
   for (p = proc; p < &proc[NPROC]; p++)
   {
     acquire(&p->lock);
@@ -116,6 +116,8 @@ int set_priority(int new_priority,int pid)
       {
         old_sp=p->sp;
         p->sp=new_priority;
+        p->niceness=5;
+        // reset run time and sleep time
         release(&p->lock);
         break;
       }
@@ -198,6 +200,8 @@ found:
   p->niceness=5; //default niceness is 5
   p->sp=60;
   p->dp=60;
+
+  // set q_wait_time=0 , recent_run_time=0 , and queue number=0
 
 
   p->rtime = 0;
@@ -320,6 +324,8 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  //add to end of queue number q(in a locked manner)
+  //reset wait_time to 0 and run time=0
 
   release(&p->lock);
 }
@@ -396,6 +402,8 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  //add to end of queue number q (in a locked manner)
+  //reset wait_time to 0 and run time=0
   release(&np->lock);
 
   return pid;
@@ -791,6 +799,12 @@ scheduler(void)
       }
 
     }
+
+    if(SCHED_POLICY==4)
+    {
+      //go through qs 0,1,2,3,4 sequentially looking for processes
+      // run processes with highest priority
+    }
   }
 }
 
@@ -806,6 +820,7 @@ scheduler(void)
 void
 sched(void)
 {
+  
   int intena;
   struct proc *p = myproc();
 
@@ -830,6 +845,8 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  //add to end of queue number q (in a locked manner)
+  //reset wait_time to 0 and run time=0
   sched();
   release(&p->lock);
 }
@@ -909,6 +926,8 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
+        //add to end of queue number q (in a locked manner)
+        //reset wait_time to 0 and run time=0
       }
       release(&p->lock);
     }
@@ -930,6 +949,8 @@ kill(int pid)
       if(p->state == SLEEPING){
         // Wake process from sleep().
         p->state = RUNNABLE;
+        //add to end of queue number q (in a locked manner)
+        //reset wait_time to 0 and run time=0
       }
       release(&p->lock);
       return 0;
